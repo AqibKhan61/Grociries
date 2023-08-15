@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:grociries/data/categories.dart';
 import 'package:grociries/Widgets/new_Item.dart';
 import 'package:grociries/models/grocery_item.dart';
 
@@ -10,22 +13,68 @@ class Grocerieslist extends StatefulWidget {
 }
 
 class _GrocerieslistState extends State<Grocerieslist> {
-  final List<GroceryItem> _groceryItem = [];
+  List<GroceryItem> _groceryItem = [];
+  var _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  void _loadItems() async {
+    final url = Uri.https(
+        'flutter-1st-dc4b6-default-rtdb.firebaseio.com', 'Shoping-list.json');
+    final response = await http.get(url);
+
+    if (response.body == 'null'){
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+    final Map<String, dynamic> listData = json.decode(response.body);
+    final List<GroceryItem> loadeditem = [];
+    for (final item in listData.entries) {
+      final category = categories.entries
+          .firstWhere(
+              (element) => element.value.title == item.value['category'])
+          .value;
+      loadeditem.add(
+        GroceryItem(
+          id: item.key,
+          category: category,
+          name: item.value['name'],
+          quantity: item.value['quantity'],
+        ),
+      );
+    }
+    setState(() {
+      _groceryItem = loadeditem;
+      _isLoading = false;
+    });
+  }
+
   void _addItem() async {
-    final newitem = await Navigator.of(context).push<GroceryItem>(
+    final newItem = await Navigator.of(context).push<GroceryItem>(
       MaterialPageRoute(
         builder: ((context) => const NewItem()),
       ),
     );
-    if (newitem == null) {
+
+    if (newItem == null) {
       return;
     }
+
     setState(() {
-      _groceryItem.add(newitem);
+      _groceryItem.add(newItem);
     });
   }
 
   void _removeItem(GroceryItem item) {
+    final url = Uri.https(
+        'flutter-1st-dc4b6-default-rtdb.firebaseio.com', 'Shoping-list/${item.id}.json');
+    http.delete(url);
     setState(() {
       _groceryItem.remove(item);
     });
@@ -44,6 +93,12 @@ class _GrocerieslistState extends State<Grocerieslist> {
         textAlign: TextAlign.center,
       ),
     );
+
+    if (_isLoading) {
+      content = const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
     if (_groceryItem.isNotEmpty) {
       content = ListView.builder(
         itemCount: _groceryItem.length,
